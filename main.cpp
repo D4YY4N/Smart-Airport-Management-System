@@ -1,110 +1,118 @@
 #include <iostream>
 #include <cmath>
+#include <fstream>
 #include <string>
 #include <climits>
 #include <vector>
 using namespace std;
-class graph1 {
+struct Airport {
+    string iata;
+    double longitude;
+    double latitude;
+};
+
+Airport findAirportByIataCode(const vector<Airport>& airports, const string& iataCode) {
+    for (const auto& airport : airports) {
+        if (airport.iata == iataCode) {
+            return airport;
+        }
+    }
+    return {"", 0.0, 0.0}; // Return an empty Airport object if not found
+}
+
+double safe_stod(const string& str) {
+    try {
+        return stod(str);
+    } catch (const std::invalid_argument&) {
+        return 0.0;
+    } catch (const std::out_of_range&) {
+        return 0.0;
+    }
+}
+
+class Graph {
 private:
-    float** adjmatrix;
-    int numvertices;
+    vector<string> airportNames;
+    vector<float> latitudes;
+    vector<float> longitudes;
+    vector<vector<float>> adjMatrix;
+    int numVertices;
+
+    float toRadian(float degree) {
+        return degree * M_PI / 180.0;
+    }
+
+    float calculateDistance(float lon1, float lon2, float lat1, float lat2) {
+        const int EARTH_RADIUS = 6371; // Radius of Earth in km
+        float deltaLat = toRadian(lat2 - lat1);
+        float deltaLon = toRadian(lon2 - lon1);
+        lat1 = toRadian(lat1);
+        lat2 = toRadian(lat2);
+
+        float a = sin(deltaLat / 2) * sin(deltaLat / 2) +
+                  cos(lat1) * cos(lat2) * sin(deltaLon / 2) * sin(deltaLon / 2);
+        float c = 2 * atan2(sqrt(a), sqrt(1 - a));
+        return EARTH_RADIUS * c;
+    }
 
 public:
-    string airports[10] = {"JFK", "LAX", "ORD", "ATL", "DFW", "DEN", "SEA", "MIA", "PHX", "BOS"};
-    float latitude[10] = {40.6413, 33.9416, 41.9742, 33.6407, 32.8998, 39.8561, 47.6062, 25.7959, 33.4484, 42.3656};
-    float longitude[10] = {-73.7781, -118.4085, -87.9073, -84.4277, -97.0403, -104.6737, -122.3321, -80.2871, -112.0740, -71.0096};
+    Graph(int vertices, const vector<string>& names, const vector<float>& lats, const vector<float>& longs)
+        : numVertices(vertices), airportNames(names), latitudes(lats), longitudes(longs) {
+        adjMatrix.resize(numVertices, vector<float>(numVertices, -1.0));
+    }
 
-    graph1() {
-        numvertices = 10;
-        adjmatrix = new float*[numvertices];
-        for (int i = 0; i < numvertices; i++) {
-            adjmatrix[i] = new float[numvertices];
-            for (int j = 0; j < numvertices; j++) {
-                adjmatrix[i][j] = -1;
-            }
+    void addEdge(int i, int j) {
+        if (i != j) {
+            adjMatrix[i][j] = calculateDistance(longitudes[i], longitudes[j], latitudes[i], latitudes[j]);
+            adjMatrix[j][i] = adjMatrix[i][j];
         }
     }
 
-    float distance(float lo1, float lo2, float la1, float la2) {
-        const int r = 6371; // Radius of Earth in km
-        float dis;
-        dis = 2 * r * asin(sqrt(sin((la2 - la1) / 2) * sin((la2 - la1) / 2) +
-                                cos(la1) * cos(la2) * sin((lo2 - lo1) / 2) * sin((lo2 - lo1) / 2)));
-        return dis;
-    }
-
-    float radian(float a) {
-        return a * M_PI / 180;
-    }
-
-    void addedge(int i, int j) {
-        float la1 = radian(latitude[i]);
-        float lo1 = radian(longitude[i]);
-        float la2 = radian(latitude[j]);
-        float lo2 = radian(longitude[j]);
-        adjmatrix[i][j] = distance(lo1, lo2, la1, la2);
-        adjmatrix[j][i] = adjmatrix[i][j];
-    }
-
-    void removeedge(int i, int j) {
-        adjmatrix[i][j] = -1;
-        adjmatrix[j][i] = -1;
-    }
-
-    void display() {
-        cout << "Graph representation (distance in km)" << endl;
-        for (int i = 0; i < numvertices; i++) {
-            cout << airports[i] << " : ";
-            for (int j = 0; j < numvertices; j++) {
-                if (adjmatrix[i][j] != -1) {
-                    cout << airports[j] << "(" << adjmatrix[i][j] << " km) ";
+    void displayMatrix() {
+        cout << "Adjacency Matrix (Distances in km):\n";
+        for (const auto& row : adjMatrix) {
+            for (float dist : row) {
+                if (dist == -1) {
+                    cout << "INF\t";
+                } else {
+                    cout << dist << "\t";
                 }
             }
             cout << endl;
         }
     }
 
-    int minkey(float key[], bool mstset[]) {
-        float min = INT_MAX;
-        int minindex;
-        for (int v = 0; v < numvertices; v++) {
-            if (!mstset[v] && key[v] < min) {
-                min = key[v];
-                minindex = v;
-            }
-        }
-        return minindex;
-    }
-
     void primMST() {
-        float key[numvertices];
-        bool mstset[numvertices];
-        int parent[numvertices];
-
-        for (int i = 0; i < numvertices; i++) {
-            key[i] = INT_MAX;
-            mstset[i] = false;
-        }
-
+        vector<float> key(numVertices, INT_MAX);
+        vector<bool> mstSet(numVertices, false);
+        vector<int> parent(numVertices, -1);
         key[0] = 0;
-        parent[0] = -1;
 
-        for (int count = 0; count < numvertices - 1; count++) {
-            int u = minkey(key, mstset);
-            mstset[u] = true;
+        for (int count = 0; count < numVertices - 1; ++count) {
+            float min = INT_MAX;
+            int u = -1;
 
-            for (int v = 0; v < numvertices; v++) {
-                if (adjmatrix[u][v] != -1 && !mstset[v] && adjmatrix[u][v] < key[v]) {
+            for (int v = 0; v < numVertices; ++v) {
+                if (!mstSet[v] && key[v] < min) {
+                    min = key[v];
+                    u = v;
+                }
+            }
+
+            mstSet[u] = true;
+
+            for (int v = 0; v < numVertices; ++v) {
+                if (adjMatrix[u][v] != -1 && !mstSet[v] && adjMatrix[u][v] < key[v]) {
                     parent[v] = u;
-                    key[v] = adjmatrix[u][v];
+                    key[v] = adjMatrix[u][v];
                 }
             }
         }
 
-        cout << "Minimum Spanning Tree:" << endl;
-        cout << "Edge\tWeight" << endl;
-        for (int i = 1; i < numvertices; i++) {
-            cout << airports[parent[i]] << " - " << airports[i] << " \t" << adjmatrix[i][parent[i]] << " km" << endl;
+        cout << "Minimum Spanning Tree:\n";
+        cout << "Edge\tWeight (km)\n";
+        for (int i = 1; i < numVertices; ++i) {
+            cout << airportNames[parent[i]] << " - " << airportNames[i] << "\t" << adjMatrix[i][parent[i]] << " km\n";
         }
     }
 };
@@ -124,23 +132,23 @@ struct Passenger {
 class PassengerQueue {
 private:
     Passenger* front;
-    Passenger* rear;
+    Passenger* rear; 
 
 public:
     PassengerQueue() {
     	front = NULL;
     	rear = NULL;
-
+    	
 	}
 
-
+   
     void enqueue(string name, int id, string seatNumber) {
-
+    	
         Passenger* newPassenger = new Passenger(name, id, seatNumber);
 
-        if (rear == NULL) {
+        if (rear == NULL) { 
             front = rear = newPassenger;
-        } else {
+        } else { 
             rear->next = newPassenger;
             rear = newPassenger;
         }
@@ -148,31 +156,31 @@ public:
         cout << "Passenger " << name << " with ID " << id << " added to the queue.\n";
     }
 
-
+  
     void dequeue() {
-        if (front == NULL) {
+        if (front == NULL) { 
             cout << "No passengers in the queue." << endl;
             return;
         }
 
         Passenger* temp = front;
-
-
+        
+        
         cout << "Passenger " << front->name << " with ID " << front->id << " boarded." << endl;
         front = front->next;
 
-        if (front == NULL) {
+        if (front == NULL) { 
             rear = NULL;
         }
 
         delete temp;
     }
 
-
+  
     void displayQueue() {
         if (front == NULL) {
             cout << "The queue is empty." << endl;
-
+            
             return;
         }
 
@@ -272,7 +280,7 @@ int main()
 	int a;
 	cout<<"1. Passenger management system "<<endl;
 	cout<<"2. Flight scheduling "<<endl;
-	cout<<"3. Airport navigation "<<endl;
+	cout<<"3. Airport navigation "<<endl;	
 	cout<<"Please enter your choice :";cin>>a;
 	if (a==1)
     {
@@ -377,17 +385,64 @@ int main()
 	}
 	if (a==3)
 	{
-		graph1 g;
-    for(int i=0; i<10; i++)
-    {
-    	for(int j=0; j<10; j++)
-    	{
-    		if(i!=j)
-    		g.addedge(i,j);
-		}
+		vector<Airport> airportList;
+
+    ifstream inputFile("airports.dat.txt");
+    if (!inputFile.is_open()) {
+        cout << "Error: Unable to open file!" << endl;
+        return 1;
+    }
+
+    while (inputFile.good()) {
+        string id, name, city, country, iata, icao, latitudeStr, longitudeStr, elevationStr, timezoneOffsetStr, timezoneRegion, type, source;
+        getline(inputFile, id, ',');
+        getline(inputFile, name, ',');
+        getline(inputFile, city, ',');
+        getline(inputFile, country, ',');
+        getline(inputFile, iata, ',');
+        getline(inputFile, icao, ',');
+        getline(inputFile, latitudeStr, ',');
+        getline(inputFile, longitudeStr, ',');
+        getline(inputFile, elevationStr, ',');
+        getline(inputFile, timezoneOffsetStr, ',');
+        getline(inputFile, timezoneRegion, ',');
+        getline(inputFile, type, ',');
+        getline(inputFile, source);
+
+        double longitude = safe_stod(longitudeStr);
+        double latitude = safe_stod(latitudeStr);
+
+        airportList.push_back({iata, longitude, latitude});
+    }
+
+    int numAirports;
+    cout << "Enter the number of airports for the MST: ";
+    cin >> numAirports;
+
+    vector<string> selectedIATA(numAirports);
+    vector<float> latitudes(numAirports), longitudes(numAirports);
+
+    for (int i = 0; i < numAirports; ++i) {
+        cout << "Enter IATA code for airport " << i + 1 << ": ";
+        cin >> selectedIATA[i];
+
+        Airport airport = findAirportByIataCode(airportList, selectedIATA[i]);
+        if (airport.iata.empty()) {
+            cout << "Error: IATA code not found: " << selectedIATA[i] << endl;
+            return 1;
+        }
+
+        latitudes[i] = airport.latitude;
+        longitudes[i] = airport.longitude;
+    }
+
+    Graph graph(numAirports, selectedIATA, latitudes, longitudes);
+
+    for (int i = 0; i < numAirports; ++i) {
+        for (int j = 0; j < numAirports; ++j) {
+            graph.addEdge(i, j);
+        }
+    }
+    graph.primMST();
 	}
-    g.primMST();
-	}
-	else
-	cout<<"Invalid entry ...."<<endl;
 }

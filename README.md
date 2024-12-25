@@ -1,7 +1,6 @@
 # Smart-Airport-Management-System
 Semester Project: Smart Airport Management System (DSA). This C++ project addresses airport navigation and flight scheduling challenges using efficient data structures like Binary Search Trees and Linked Lists. Features include passenger management, flight scheduling, and airport navigation. Designed for scalability and user-friendliness.
 
-# Semester Project: Smart Airport Management System
 
 ## Introduction
 
